@@ -1,0 +1,19 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "NEXTAUTH_SECRET",
+      "description": "NextAuth.js secret for session encryption. Generate with: openssl rand -base64 32",
+      "requiredAtBoot": true,
+      "generatedForDevelopment": true
+    },
+    {
+      "name": "CALENDSO_ENCRYPTION_KEY",
+      "description": "Application encryption key for symmetric encryption (32-character base64 string). Generate with: openssl rand -base64 24",
+      "requiredAtBoot": true,
+      "generatedForDevelopment": true
+    }
+  ]
+}

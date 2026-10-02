@@ -1,0 +1,73 @@
+# Base44 development compose for Cal.diy
+# Runs the Next.js app from bind-mounted source with live reload.
+services:
+  database:
+    image: postgres:16-alpine
+    restart: on-failure
+    environment:
+      - POSTGRES_USER=calcom
+      - POSTGRES_PASSWORD=calcom
+      - POSTGRES_DB=calcom
+    volumes:
+      - database-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U calcom -d calcom"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: on-failure
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    image: node:20
+    working_dir: /calcom
+    volumes:
+      - .:/calcom
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://calcom:calcom@database:5432/calcom
+      - DATABASE_DIRECT_URL=postgresql://calcom:calcom@database:5432/calcom
+      - NEXT_PUBLIC_WEBAPP_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+      - NEXT_PUBLIC_WEBSITE_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+      - NEXT_PUBLIC_EMBED_LIB_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}/embed/embed.js
+      - CALCOM_TELEMETRY_DISABLED=1
+      - HUSKY=0
+      - BASE44_PUBLIC_HOST_SUFFIX=${BASE44_PUBLIC_HOST_SUFFIX}
+      - CRON_API_KEY=0cc0e6c35519bba620c9360cfe3e68d0
+    env_file:
+      - /run/base44/app.env
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000', r => {process.exit(r.statusCode < 500 ? 0 : 1)}).on('error', () => process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 600s
+    command:
+      - sh
+      - -ec
+      - |
+        [ -f .env ] || cp .env.example .env
+        [ -f .env.appStore ] || cp .env.appStore.example .env.appStore
+        CI=true yarn install --immutable
+        cd packages/prisma && npx prisma generate && npx prisma migrate deploy
+        cd /calcom/apps/web && node scripts/copy-app-store-static.js && exec npx next dev --turbopack --hostname 0.0.0.0 --port 3000
+
+volumes:
+  database-data:
+  redis-data:

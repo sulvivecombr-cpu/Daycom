@@ -234,6 +234,26 @@ For complex features, you can use spec-driven development when explicitly reques
 
 See [SPEC-WORKFLOW.md](SPEC-WORKFLOW.md) for the full workflow documentation.
 
+## Base44 Dev Environment
+
+The app runs via `docker-compose.base44.yml` — a development-oriented compose that bind-mounts the source and runs `next dev --turbopack` with live reload.
+
+### Setup quirks
+
+- **Prisma .env conflict**: `packages/prisma/.env` is a symlink to `../../.env`. Running `prisma generate --schema <path>` from the repo root makes Prisma load both the root `.env` and the symlinked `packages/prisma/.env`, causing a conflict error. Run Prisma commands from `packages/prisma/` instead: `cd packages/prisma && npx prisma generate && npx prisma migrate deploy`.
+- **Dev server bypasses turbo**: The compose startup runs `npx next dev` directly (not `yarn dev`), skipping turbo's `env-check` dependency that would require a complete `.env` matching `.env.example`. The `.env` and `.env.appStore` files are created at runtime from their `.example` counterparts; compose `environment:` values take precedence because dotenv does not override existing process env vars.
+- **allowedDevOrigins**: `apps/web/next.config.ts` conditionally adds `allowedDevOrigins` from `BASE44_PUBLIC_HOST_SUFFIX` so the preview origin can access dev assets/HMR.
+- **Required boot secrets**: `NEXTAUTH_SECRET` and `CALENDSO_ENCRYPTION_KEY` are required at boot (next.config.ts throws if missing). Both are generated as development placeholders via `generate_development_secrets` and delivered through `/run/base44/app.env`.
+
+### Verify the app works
+
+```bash
+docker compose -f docker-compose.base44.yml ps          # all 3 services healthy
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000  # 307 (redirects to /auth/setup)
+```
+
+The setup wizard at `/auth/setup` confirms the database is migrated and the app is rendering from live source.
+
 ## Extended Documentation
 
 For detailed information, see the `agents/` directory:
