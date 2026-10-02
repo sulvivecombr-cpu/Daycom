@@ -223,6 +223,9 @@ const nextConfig = (phase: string): NextConfig => {
 
   return {
     output: process.env.BUILD_STANDALONE === "true" ? "standalone" : undefined,
+    allowedDevOrigins: process.env.BASE44_PUBLIC_HOST_SUFFIX
+      ? ["3000-" + process.env.BASE44_PUBLIC_HOST_SUFFIX]
+      : undefined,
     serverExternalPackages: [
       "deasync",
       "http-cookie-agent",

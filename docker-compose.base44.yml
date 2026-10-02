@@ -1,0 +1,72 @@
+volumes:
+  database-data:
+  redis-data:
+
+services:
+  database:
+    image: postgres:16
+    restart: on-failure
+    environment:
+      POSTGRES_USER: calcom
+      POSTGRES_PASSWORD: calcom_password
+      POSTGRES_DB: calcom
+    volumes:
+      - database-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U calcom"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    restart: on-failure
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    image: node:20
+    working_dir: /calcom
+    volumes:
+      - ./:/calcom
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env
+    environment:
+      - DATABASE_URL=postgresql://calcom:calcom_password@database:5432/calcom
+      - DATABASE_DIRECT_URL=postgresql://calcom:calcom_password@database:5432/calcom
+      - NEXT_PUBLIC_WEBAPP_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+      - NEXT_PUBLIC_WEBSITE_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+      - NEXT_PUBLIC_EMBED_LIB_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}/embed/embed.js
+      - BASE44_PUBLIC_HOST_SUFFIX=${BASE44_PUBLIC_HOST_SUFFIX}
+      - NODE_OPTIONS=--max-old-space-size=6144
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command:
+      - sh
+      - -ec
+      - |
+        yarn install
+        npx prisma generate --schema packages/prisma/schema.prisma
+        npx prisma migrate deploy --schema packages/prisma/schema.prisma
+        yarn workspace @calcom/prisma db-seed
+        cd apps/web
+        node scripts/copy-app-store-static.js
+        exec yarn next dev --turbopack --hostname 0.0.0.0 --port 3000
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 900s

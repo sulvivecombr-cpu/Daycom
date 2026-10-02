@@ -242,3 +242,31 @@ For detailed information, see the `agents/` directory:
 - **[agents/rules/](agents/rules/)** - Modular engineering rules
 - **[agents/commands.md](agents/commands.md)** - Complete command reference
 - **[agents/knowledge-base.md](agents/knowledge-base.md)** - Domain knowledge and business rules
+
+## Base44 Dev Environment
+
+The app runs via `docker-compose.base44.yml` (not the repo's own `docker-compose.yml`, which builds a production image).
+
+### Architecture
+- **web**: `node:20` base image, source bind-mounted at `/calcom`, runs `yarn install → prisma generate → prisma migrate deploy → db-seed → next dev --turbopack` on startup
+- **database**: `postgres:16` (user `calcom`, password `calcom_password`, db `calcom`)
+- **redis**: `redis:7`
+
+### Required env vars at boot
+- `NEXTAUTH_SECRET` — generated development placeholder in `/run/base44/app.env`; next.config.ts throws if missing
+- `CALENDSO_ENCRYPTION_KEY` — same; must be 32 bytes for AES256
+- `NEXT_PUBLIC_WEBAPP_URL` — set to the preview origin `https://3000-$BASE44_PUBLIC_HOST_SUFFIX` via compose `environment:`
+- `NEXTAUTH_URL` — auto-derived from `NEXT_PUBLIC_WEBAPP_URL` in next.config.ts
+
+### Quirks
+- `turbo run dev` depends on `env-check:common` which requires a `.env` file matching `.env.example`. The Base44 compose bypasses this by running `next dev --turbopack` directly (not through `yarn dev`/turbo).
+- Prisma schema lives at `packages/prisma/schema.prisma`, not `apps/web/prisma/`.
+- `allowedDevOrigins` was added to `apps/web/next.config.ts` to allow the preview origin for HMR/dev assets.
+- The seed creates test users including `admin@example.com` / `ADMINadmin2022!`.
+
+### Verify it works
+```bash
+docker compose -f docker-compose.base44.yml ps          # all 3 services healthy
+curl -s -o /dev/null -w "%{http_code}" localhost:3000    # 307 (redirect to /auth/login)
+curl -s -o /dev/null -w "%{http_code}" localhost:3000/auth/login  # 200
+```
