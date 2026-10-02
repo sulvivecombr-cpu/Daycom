@@ -1,0 +1,96 @@
+# Base44 development compose — runs Cal.diy from source with live reload.
+# Reuse this file; do not adapt the repo's own docker-compose.yml (prebuilt prod image).
+
+volumes:
+  db-data:
+  redis-data:
+
+services:
+  db:
+    image: postgres:16
+    restart: on-failure
+    environment:
+      - POSTGRES_USER=calcom
+      - POSTGRES_PASSWORD=calcom
+      - POSTGRES_DB=calendso
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U calcom -d calendso"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7
+    restart: on-failure
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  web:
+    image: node:20
+    working_dir: /calcom
+    restart: on-failure
+    volumes:
+      - ./:/calcom
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env
+    environment:
+      - DATABASE_URL=postgresql://calcom:calcom@db:5432/calendso
+      - DATABASE_DIRECT_URL=postgresql://calcom:calcom@db:5432/calendso
+      - NEXT_PUBLIC_WEBAPP_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+      - NEXTAUTH_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}/api/auth
+      - NEXT_PUBLIC_EMBED_LIB_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}/embed/embed.js
+      - BASE44_PUBLIC_HOST_SUFFIX
+      - CALCOM_TELEMETRY_DISABLED=1
+      - EMAIL_FROM=notifications@cal.diy
+      - EMAIL_FROM_NAME=Cal.diy
+      - NODE_OPTIONS=--max-old-space-size=6144
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 600s
+    command:
+      - sh
+      - -ec
+      - |
+        # Make Yarn 4 (local release) available on PATH
+        chmod +x .yarn/releases/yarn-4.12.0.cjs
+        ln -sf /calcom/.yarn/releases/yarn-4.12.0.cjs /usr/local/bin/yarn
+
+        # Create .env files so turbo env-check passes
+        [ -f .env ] || cp .env.example .env
+        [ -f .env.appStore ] || cp .env.appStore.example .env.appStore
+
+        # Install all workspace dependencies
+        yarn install
+
+        # Generate Prisma client
+        yarn prisma generate
+
+        # Apply database migrations
+        yarn prisma migrate deploy
+
+        # Copy app-store static assets
+        yarn workspace @calcom/web run copy-app-store-static
+
+        # Start the Next.js dev server (Turbopack) bound to all interfaces
+        cd apps/web
+        exec yarn next dev --turbopack -H 0.0.0.0

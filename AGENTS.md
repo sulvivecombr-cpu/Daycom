@@ -234,6 +234,21 @@ For complex features, you can use spec-driven development when explicitly reques
 
 See [SPEC-WORKFLOW.md](SPEC-WORKFLOW.md) for the full workflow documentation.
 
+## Base44 Dev Environment
+
+The app runs in the Base44 sandbox via `docker-compose.base44.yml` (not the repo's own `docker-compose.yml`, which uses a prebuilt production image).
+
+- **Start**: `docker compose -f docker-compose.base44.yml up -d`
+- **Services**: PostgreSQL (`db`), Redis (`redis`), Next.js dev server (`web` — Turbopack, bind-mounted source, live reload)
+- **Port**: 3000 (mapped to host)
+- **Required env vars**: `NEXTAUTH_SECRET` and `CALENDSO_ENCRYPTION_KEY` are generated in `.env.base44-defaults`; real values can be supplied via the Base44 secrets dashboard (stored in `/run/base44/app.env`, loaded last so they override defaults)
+- **Database**: `postgresql://calcom:calcom@db:5432/calendso` — migrations run automatically on container startup via `yarn prisma migrate deploy`
+- **First run**: App redirects to `/auth/setup` to create the first admin user
+- **Yarn**: Yarn 4.12.0 via local release (`.yarn/releases/yarn-4.12.0.cjs`), symlinked to `/usr/local/bin/yarn` on startup
+- **Env check**: The `dev` turbo task depends on `env-check:common` and `env-check:app-store`, which require `.env` and `.env.appStore` to exist — the compose startup copies them from `.env.example` / `.env.appStore.example` if missing
+- **Preview origin**: `allowedDevOrigins` in `apps/web/next.config.ts` is set from `BASE44_PUBLIC_HOST_SUFFIX` so the preview proxy origin is accepted by the Next.js dev server
+- **`@ts-expect-error` in providers.tsx / _app.tsx**: Required because `react-inlinesvg/provider`'s `CacheProvider` returns `ReactNode` (includes `undefined`), which is incompatible with the pinned `@types/react@18.0.26` that requires JSX components to return `Element | null`. Do not remove these directives until `@types/react` is upgraded.
+
 ## Extended Documentation
 
 For detailed information, see the `agents/` directory:
