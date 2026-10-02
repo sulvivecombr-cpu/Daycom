@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: on-failure
+    environment:
+      - POSTGRES_USER=calcom
+      - POSTGRES_PASSWORD=calcom_password
+      - POSTGRES_DB=calendso
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U calcom -d calendso"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    image: node:20
+    working_dir: /calcom
+    volumes:
+      - .:/calcom
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+      - /run/base44/app.env
+    environment:
+      - DATABASE_URL=postgresql://calcom:calcom_password@db:5432/calendso
+      - DATABASE_DIRECT_URL=postgresql://calcom:calcom_password@db:5432/calendso
+      - NEXT_PUBLIC_WEBAPP_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+      - NEXTAUTH_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}/api/auth
+      - NEXT_PUBLIC_WEBSITE_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+      - NEXT_PUBLIC_EMBED_LIB_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}/embed/embed.js
+      - CALCOM_TELEMETRY_DISABLED=1
+      - BASE44_PUBLIC_HOST_SUFFIX=${BASE44_PUBLIC_HOST_SUFFIX}
+      - NODE_OPTIONS=--max-old-space-size=4096
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - sh
+      - -ec
+      - |
+        YARN="node .yarn/releases/yarn-4.12.0.cjs"
+        $$YARN install
+        $$YARN workspace @calcom/prisma run db-deploy
+        $$YARN workspace @calcom/prisma run db-seed
+        cd /calcom/apps/web && node scripts/copy-app-store-static.js
+        export PATH="/calcom/node_modules/.bin:$$PATH"
+        cd /calcom/apps/web
+        exec next dev --turbopack --hostname 0.0.0.0 --port 3000
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "node -e \"require('http').get('http://localhost:3000', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))\""
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 1800s
+
+volumes:
+  db-data:

@@ -2,6 +2,18 @@
 
 You are a senior Cal.diy engineer working in a Yarn/Turbo monorepo. You prioritize type safety, security, and small, reviewable diffs.
 
+## Base44 Dev Environment
+
+The app runs via `docker compose -f docker-compose.base44.yml up -d` (dev mode with live reload).
+
+- **Runtime**: `node:20` with source bind-mounted at `/calcom`; Next.js dev server with Turbopack on port 3000.
+- **Database**: PostgreSQL 16 in compose (user `calcom`, db `calendso`); 596 Prisma migrations applied on first boot, then seeded.
+- **Yarn**: Yarn Berry 4.12.0 — invoke via `node .yarn/releases/yarn-4.12.0.cjs` (classic yarn in the image is v1).
+- **Required env vars**: `NEXTAUTH_SECRET` (any random string) and `CALENDSO_ENCRYPTION_KEY` (must be exactly 32 bytes — use `openssl rand -hex 16`). Both are in `.env` (gitignored). `next.config.ts` throws if either is missing.
+- **Env files**: `.env` and `.env.appStore` are gitignored and required by the turbo `env-check` tasks. The compose command bypasses turbo and runs `next dev` directly, but the files must exist for other turbo tasks.
+- **allowedDevOrigins**: Added to `next.config.ts` using `BASE44_PUBLIC_HOST_SUFFIX` so the preview origin can access dev assets/HMR.
+- **Verify**: `curl -sS -o /dev/null -w '%{http_code}' http://localhost:3000/auth/login` should return 200.
+
 ## Do
 
 - Use `select` instead of `include` in Prisma queries for performance and security
