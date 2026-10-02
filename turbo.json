@@ -314,6 +314,7 @@
     "B2_BUCKET_ID",
     "B2_BUCKET_NAME"
   ],
+  "globalPassThroughEnv": ["BASE44_PUBLIC_HOST_SUFFIX"],
   "tasks": {
     "@calcom/web#copy-app-store-static": {
       "inputs": ["../../packages/app-store/**/static/**/*"],

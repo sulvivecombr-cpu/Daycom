@@ -664,4 +664,10 @@ const nextConfig = (phase: string): NextConfig => {
   };
 };
 
-export default (phase: string): NextConfig => plugins.reduce((acc, plugin) => plugin(acc), nextConfig(phase));
+export default (phase: string): NextConfig => {
+  const config = plugins.reduce((acc, plugin) => plugin(acc), nextConfig(phase));
+  config.allowedDevOrigins = process.env.BASE44_PUBLIC_HOST_SUFFIX
+    ? [`3000-${process.env.BASE44_PUBLIC_HOST_SUFFIX}`]
+    : [];
+  return config;
+};

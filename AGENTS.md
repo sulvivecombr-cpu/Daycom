@@ -234,6 +234,18 @@ For complex features, you can use spec-driven development when explicitly reques
 
 See [SPEC-WORKFLOW.md](SPEC-WORKFLOW.md) for the full workflow documentation.
 
+## Base44 Dev Environment
+
+The Base44 dev environment uses `docker-compose.base44.yml` (not the repo's `docker-compose.yml`, which builds a production image).
+
+- **Start**: `docker compose -f docker-compose.base44.yml up -d`
+- **Services**: PostgreSQL 16 (`db`), Redis 7 (`redis`), Next.js dev server (`web` on port 3000)
+- **Secrets**: `NEXTAUTH_SECRET` and `CALENDSO_ENCRYPTION_KEY` are required at boot. They are delivered via `/run/base44/app.env` (platform-managed). Placeholders in `.env.base44-defaults` allow boot before real secrets exist.
+- **Env files**: `.env` and `.env.appStore` must exist (copies of `.env.example` / `.env.appStore.example`) — the turbo `dev` task depends on `dotenv-checker` validating them.
+- **Turbo env passthrough**: `BASE44_PUBLIC_HOST_SUFFIX` is in `globalPassThroughEnv` in `turbo.json` so it reaches the Next.js config. Without this, `allowedDevOrigins` in `next.config.ts` gets an empty array and HMR is blocked.
+- **allowedDevOrigins**: Set in `next.config.ts` after plugin application, using `BASE44_PUBLIC_HOST_SUFFIX` to allow the preview origin for dev assets/HMR.
+- **Verify**: `curl -sL -o /dev/null -w '%{http_code}' http://localhost:3000/auth/setup` should return `200`.
+
 ## Extended Documentation
 
 For detailed information, see the `agents/` directory:

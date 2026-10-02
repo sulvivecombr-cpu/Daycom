@@ -1,0 +1,63 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: on-failure
+    environment:
+      POSTGRES_USER: calcom
+      POSTGRES_PASSWORD: calcom_password
+      POSTGRES_DB: calendso
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U calcom -d calendso"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: on-failure
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    image: node:20
+    working_dir: /calcom
+    volumes:
+      - ./:/calcom
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env
+    environment:
+      - DATABASE_URL=postgresql://calcom:calcom_password@db:5432/calendso
+      - DATABASE_DIRECT_URL=postgresql://calcom:calcom_password@db:5432/calendso
+      - NEXT_PUBLIC_WEBAPP_URL=http://localhost:3000
+      - NEXTAUTH_URL=http://localhost:3000
+      - REDIS_URL=redis://redis:6379
+      - CALCOM_TELEMETRY_DISABLED=1
+      - NODE_OPTIONS=--max-old-space-size=6144
+      - BASE44_PUBLIC_HOST_SUFFIX=${BASE44_PUBLIC_HOST_SUFFIX}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["sh", "-ec", "yarn install --immutable && yarn prisma generate && yarn db-deploy && exec yarn dev"]
+    restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const s=require('net').connect(3000,'127.0.0.1');s.on('connect',()=>process.exit(0));s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),5000)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+volumes:
+  db-data:
+  redis-data:
